@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#14102a">
+<title>ビンゴ抽選機</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #14102a;
+    --bg2: #241a4a;
+    --panel: rgba(255,255,255,0.07);
+    --text: #ffffff;
+    --muted: #b9b3d6;
+    --B: #3d8bff;
+    --I: #ff4d5e;
+    --N: #e8e8f0;
+    --G: #2ecc71;
+    --O: #ffc531;
+    --accent: #ff7a1a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(ellipse at center, var(--bg2) 0%, var(--bg) 70%);
+    color: var(--text);
+    font-family: "Hiragino Sans", "Noto Sans JP", "Roboto", system-ui, sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ---------- メイン画面 ---------- */
+  #main {
+    height: 100%;
+    display: grid;
+    grid-template-rows: auto 1fr auto auto;
+    padding: max(12px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+    gap: 8px;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .count { font-size: clamp(18px, 3vmin, 30px); color: var(--muted); }
+  .count b { color: var(--text); font-size: 1.3em; }
+  .tools { display: flex; gap: 8px; }
+  .tool {
+    background: var(--panel); color: var(--text);
+    border: 1px solid rgba(255,255,255,0.18); border-radius: 12px;
+    padding: 10px 16px; font-size: clamp(15px, 2.4vmin, 22px);
+  }
+  .tool:active { background: rgba(255,255,255,0.2); }
+
+  #stage { display: flex; align-items: center; justify-content: center; min-height: 0; }
+  #ball {
+    width: min(62vmin, 92vw); aspect-ratio: 1; border-radius: 50%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 35% 30%, #ffffff 0%, #f1f0f7 45%, #c9c6d9 100%);
+    box-shadow: 0 0 0 1.4vmin var(--ring, #6c63a8), 0 2vmin 6vmin rgba(0,0,0,0.6);
+    color: #1b1636; line-height: 0.9;
+    transition: box-shadow .2s;
+  }
+  #letter { font-size: min(17vmin, 25vw); font-weight: 900; color: var(--ring, #6c63a8); }
+  #number { font-size: min(27vmin, 40vw); font-weight: 900; font-variant-numeric: tabular-nums; }
+  #ball.idle #number { font-size: min(10vmin, 14vw); color: #6c63a8; }
+  #ball.rolling { animation: shake .12s infinite; }
+  #ball.hit { animation: pop .6s ease-out; }
+  @keyframes shake {
+    0% { transform: translate(0,0) rotate(0); }
+    25% { transform: translate(-0.6vmin, 0.4vmin) rotate(-1.5deg); }
+    50% { transform: translate(0.5vmin, -0.4vmin) rotate(1deg); }
+    75% { transform: translate(-0.3vmin, -0.5vmin) rotate(1.5deg); }
+    100% { transform: translate(0,0) rotate(0); }
+  }
+  @keyframes pop {
+    0% { transform: scale(0.6); }
+    55% { transform: scale(1.12); }
+    100% { transform: scale(1); }
+  }
+
+  #recent {
+    display: flex; justify-content: center; gap: 10px; min-height: 52px; flex-wrap: wrap;
+  }
+  .chip {
+    min-width: 76px; padding: 8px 12px; border-radius: 999px; text-align: center;
+    font-weight: 800; font-size: clamp(16px, 2.8vmin, 26px);
+    background: var(--panel); border: 2px solid var(--c);
+  }
+  .chip span { color: var(--c); margin-right: 4px; }
+  .chip.latest { background: var(--c); color: #14102a; }
+  .chip.latest span { color: #14102a; }
+
+  #go {
+    justify-self: center;
+    width: min(520px, 100%); padding: 2.6vmin 0;
+    font-size: clamp(30px, 6vmin, 60px); font-weight: 900; letter-spacing: .15em;
+    color: #fff; border: none; border-radius: 999px;
+    background: linear-gradient(180deg, #ff9a3c, var(--accent));
+    box-shadow: 0 0.8vmin 0 #b34a00, 0 1.2vmin 3vmin rgba(0,0,0,0.5);
+  }
+  #go:active { transform: translateY(0.6vmin); box-shadow: 0 0.2vmin 0 #b34a00; }
+  #go.stop { background: linear-gradient(180deg, #ff5d6c, #e0213a); box-shadow: 0 0.8vmin 0 #8a0f1f, 0 1.2vmin 3vmin rgba(0,0,0,0.5); }
+  #go:disabled { background: #555; box-shadow: none; color: #aaa; }
+
+  /* 横向き：ボール左、操作右 */
+  @media (orientation: landscape) and (min-aspect-ratio: 4/3) {
+    #main {
+      grid-template-columns: 1.3fr 1fr;
+      grid-template-rows: auto 1fr auto;
+      grid-template-areas: "head head" "stage recent" "stage go";
+    }
+    header { grid-area: head; }
+    #stage { grid-area: stage; }
+    #ball { width: min(76vh, 54vw); }
+    #letter { font-size: min(20vh, 14vw); }
+    #number { font-size: min(32vh, 22vw); }
+    #ball.idle #number { font-size: min(12vh, 9vw); }
+    #recent { grid-area: recent; align-content: center; }
+    #go { grid-area: go; align-self: end; margin-bottom: 2vh; }
+  }
+
+  /* ---------- 履歴画面 ---------- */
+  #history {
+    position: fixed; inset: 0; background: var(--bg);
+    display: none; flex-direction: column;
+    padding: max(12px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+    gap: 12px;
+  }
+  #history.open { display: flex; }
+  #history h2 { margin: 0; font-size: clamp(20px, 3.4vmin, 32px); }
+  .hist-body { flex: 1; min-height: 0; display: grid; gap: 16px; grid-template-rows: 1fr auto; }
+  @media (orientation: landscape) {
+    .hist-body { grid-template-columns: 1.6fr 1fr; grid-template-rows: 1fr; }
+  }
+  #board {
+    display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: auto repeat(15, 1fr);
+    gap: 4px; min-height: 0;
+  }
+  .bh {
+    text-align: center; font-weight: 900; font-size: clamp(20px, 3.6vmin, 36px);
+    color: #14102a; background: var(--c); border-radius: 8px; padding: 2px 0;
+  }
+  .cell {
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; background: rgba(255,255,255,0.05); color: #5c557f;
+    font-weight: 700; font-size: clamp(13px, 2.4vmin, 24px); font-variant-numeric: tabular-nums;
+  }
+  .cell.on { background: var(--c); color: #14102a; }
+  .cell.last { outline: 3px solid #fff; }
+  #order-wrap { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-radius: 12px; padding: 12px; }
+  #order-wrap h3 { margin: 0 0 8px; font-size: clamp(16px, 2.6vmin, 24px); color: var(--muted); font-weight: 600; }
+  #order { overflow-y: auto; display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; }
+  #order .o { font-size: clamp(14px, 2.4vmin, 22px); padding: 4px 8px; border-radius: 8px; background: rgba(255,255,255,0.06); }
+  #order .o small { color: var(--muted); margin-right: 4px; }
+  #order .o span { color: var(--c); font-weight: 800; }
+  .empty { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div id="main">
+  <header>
+    <div class="count">出た数 <b id="cnt">0</b> / 75</div>
+    <div class="tools">
+      <button class="tool" id="btn-sound" aria-label="音のオン・オフ">🔊 音</button>
+      <button class="tool" id="btn-hist">📋 履歴</button>
+      <button class="tool" id="btn-reset">↺ 新しいゲーム</button>
+    </div>
+  </header>
+
+  <div id="stage">
+    <div id="ball" class="idle">
+      <div id="letter"></div>
+      <div id="number">START</div>
+    </div>
+  </div>
+
+  <div id="recent"></div>
+
+  <button id="go">スタート</button>
+</div>
+
+<section id="history" aria-label="履歴">
+  <header>
+    <h2>履歴（<span id="hcnt">0</span> / 75）</h2>
+    <button class="tool" id="btn-close">✕ 閉じる</button>
+  </header>
+  <div class="hist-body">
+    <div id="board"></div>
+    <div id="order-wrap">
+      <h3>出た順</h3>
+      <div id="order"></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------------- 定数・状態 ----------------
+  const LETTERS = ['B', 'I', 'N', 'G', 'O'];
+  const STORE_KEY = 'bingo75.state.v1';
+  const SOUND_KEY = 'bingo75.sound';
+
+  const letterOf = n => LETTERS[Math.floor((n - 1) / 15)];
+  const colorOf = n => `var(--${letterOf(n)})`;
+
+  let drawn = [];        // 出た番号（出た順）
+  let rolling = false;
+  let rollTimer = null;
+  let soundOn = true;
+
+  // ---------------- 保存・復元（再開機能） ----------------
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ drawn, savedAt: Date.now() })); } catch (e) {}
+  }
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORE_KEY));
+      if (s && Array.isArray(s.drawn)) {
+        const seen = new Set();
+        drawn = s.drawn.filter(n => Number.isInteger(n) && n >= 1 && n <= 75 && !seen.has(n) && seen.add(n));
+      }
+    } catch (e) { drawn = []; }
+    try { soundOn = localStorage.getItem(SOUND_KEY) !== 'off'; } catch (e) {}
+  }
+
+  // ---------------- 乱数 ----------------
+  function randInt(max) { // 0..max-1（偏りなし）
+    const buf = new Uint32Array(1);
+    const limit = Math.floor(0x100000000 / max) * max;
+    do { crypto.getRandomValues(buf); } while (buf[0] >= limit);
+    return buf[0] % max;
+  }
+  function remaining() {
+    const used = new Set(drawn);
+    const r = [];
+    for (let n = 1; n <= 75; n++) if (!used.has(n)) r.push(n);
+    return r;
+  }
+
+  // ---------------- 音（Web Audio で生成） ----------------
+  let ctx = null, master = null, noiseBuf = null, drumTimer = null, drumGain = null;
+  function audio() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = 0.9;
+      master.connect(ctx.destination);
+      const len = ctx.sampleRate * 1.5;
+      noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  function hit(t, vol, freq, dur, dest) { // スネア風の一打
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = 0.8;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(bp).connect(g).connect(dest);
+    src.start(t, Math.random() * 1.2, dur + 0.02);
+  }
+  function startDrum() {
+    if (!soundOn || !audio()) return;
+    drumGain = ctx.createGain();
+    drumGain.gain.setValueAtTime(0.35, ctx.currentTime);
+    drumGain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 4); // だんだん盛り上がる
+    drumGain.connect(master);
+    // 低音のうなり
+    const rumble = ctx.createOscillator();
+    rumble.type = 'triangle'; rumble.frequency.value = 55;
+    const rg = ctx.createGain(); rg.gain.value = 0.25;
+    rumble.connect(rg).connect(drumGain);
+    rumble.start();
+    drumGain._rumble = rumble;
+    let next = ctx.currentTime;
+    const interval = 0.045;
+    const g = drumGain;
+    drumTimer = setInterval(() => {
+      while (next < ctx.currentTime + 0.15) {
+        hit(next, 0.55 + Math.random() * 0.25, 1800 + Math.random() * 600, 0.07, g);
+        next += interval;
+      }
+    }, 40);
+  }
+  function stopDrum() {
+    clearInterval(drumTimer); drumTimer = null;
+    if (drumGain && ctx) {
+      const g = drumGain; drumGain = null;
+      g.gain.cancelScheduledValues(ctx.currentTime);
+      g.gain.setValueAtTime(g.gain.value, ctx.currentTime);
+      g.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
+      setTimeout(() => { try { g._rumble.stop(); g.disconnect(); } catch (e) {} }, 200);
+    }
+  }
+  function playFanfare() { // 確定時の「ジャーン」
+    if (!soundOn || !audio()) return;
+    const t = ctx.currentTime + 0.02;
+    // シンバル
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 5000;
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.7, t); cg.gain.exponentialRampToValueAtTime(0.001, t + 1.4);
+    src.connect(hp).connect(cg).connect(master); src.start(t);
+    // バスドラム
+    const k = ctx.createOscillator(); const kg = ctx.createGain();
+    k.frequency.setValueAtTime(140, t); k.frequency.exponentialRampToValueAtTime(40, t + 0.25);
+    kg.gain.setValueAtTime(1, t); kg.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    k.connect(kg).connect(master); k.start(t); k.stop(t + 0.45);
+    // 和音（C メジャー）
+    [261.63, 329.63, 392.0, 523.25].forEach((f, i) => {
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.11, t + 0.03);
+      g.gain.setValueAtTime(0.11, t + 0.5);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 1.6 + i * 0.05);
+      o.connect(lp).connect(g).connect(master); o.start(t); o.stop(t + 1.8);
+    });
+  }
+
+  // ---------------- 画面スリープ防止 ----------------
+  let wakeLock = null;
+  async function keepAwake() {
+    try {
+      if ('wakeLock' in navigator && !wakeLock && document.visibilityState === 'visible') {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      }
+    } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') keepAwake();
+    else if (rolling) stopRoll(); // 裏に回ったら抽選を確定させておく
+  });
+
+  // ---------------- 表示 ----------------
+  const $ = id => document.getElementById(id);
+  const ball = $('ball'), letterEl = $('letter'), numberEl = $('number'), goBtn = $('go');
+
+  function showBall(n, mode) {
+    ball.className = mode;
+    if (n) {
+      letterEl.textContent = letterOf(n);
+      numberEl.textContent = n;
+      ball.style.setProperty('--ring', colorOf(n));
+    } else {
+      letterEl.textContent = '';
+      numberEl.textContent = drawn.length >= 75 ? '終了' : 'START';
+      ball.style.removeProperty('--ring');
+    }
+  }
+  function renderRecent() {
+    const box = $('recent');
+    box.innerHTML = '';
+    drawn.slice(-6).reverse().forEach((n, i) => {
+      const c = document.createElement('div');
+      c.className = 'chip' + (i === 0 ? ' latest' : '');
+      c.style.setProperty('--c', colorOf(n));
+      c.innerHTML = `<span>${letterOf(n)}</span>${n}`;
+      box.appendChild(c);
+    });
+  }
+  function renderCount() {
+    $('cnt').textContent = drawn.length;
+    $('hcnt').textContent = drawn.length;
+    goBtn.disabled = drawn.length >= 75;
+    if (drawn.length >= 75) goBtn.textContent = '全部出ました';
+  }
+  function renderHistory() {
+    const board = $('board');
+    board.innerHTML = '';
+    const used = new Set(drawn);
+    const last = drawn[drawn.length - 1];
+    LETTERS.forEach(L => {
+      const h = document.createElement('div');
+      h.className = 'bh'; h.textContent = L; h.style.setProperty('--c', `var(--${L})`);
+      board.appendChild(h);
+    });
+    for (let row = 0; row < 15; row++) {
+      for (let col = 0; col < 5; col++) {
+        const n = col * 15 + row + 1;
+        const c = document.createElement('div');
+        c.className = 'cell' + (used.has(n) ? ' on' : '') + (n === last ? ' last' : '');
+        c.style.setProperty('--c', colorOf(n));
+        c.textContent = n;
+        board.appendChild(c);
+      }
+    }
+    const order = $('order');
+    order.innerHTML = drawn.length ? '' : '<div class="empty">まだありません</div>';
+    drawn.forEach((n, i) => {
+      const o = document.createElement('div');
+      o.className = 'o';
+      o.style.setProperty('--c', colorOf(n));
+      o.innerHTML = `<small>${i + 1}.</small><span>${letterOf(n)}</span> ${n}`;
+      order.appendChild(o);
+    });
+  }
+  function renderAll() {
+    const last = drawn[drawn.length - 1];
+    showBall(last, last ? 'hit' : 'idle');
+    renderRecent(); renderCount();
+    if ($('history').classList.contains('open')) renderHistory();
+  }
+
+  // ---------------- スタート／ストップ ----------------
+  function startRoll() {
+    const pool = remaining();
+    if (!pool.length) return;
+    rolling = true;
+    goBtn.textContent = 'ストップ';
+    goBtn.classList.add('stop');
+    startDrum();
+    rollTimer = setInterval(() => {
+      showBall(pool[randInt(pool.length)], 'rolling');
+    }, 60);
+  }
+  function stopRoll() {
+    clearInterval(rollTimer); rollTimer = null;
+    rolling = false;
+    stopDrum();
+    const pool = remaining();
+    if (pool.length) {
+      const n = pool[randInt(pool.length)];
+      drawn.push(n);
+      save();             // 確定したらすぐ保存
+      playFanfare();
+      if (navigator.vibrate) navigator.vibrate(80);
+    }
+    goBtn.classList.remove('stop');
+    goBtn.textContent = 'スタート';
+    renderAll();
+    // pop アニメーションを毎回再生
+    ball.classList.remove('hit'); void ball.offsetWidth; ball.classList.add('hit');
+  }
+
+  goBtn.addEventListener('click', () => {
+    keepAwake();
+    audio();
+    if (rolling) stopRoll(); else startRoll();
+  });
+
+  // ---------------- ツールボタン ----------------
+  function renderSoundBtn() { $('btn-sound').textContent = soundOn ? '🔊 音' : '🔇 消音'; }
+  $('btn-sound').addEventListener('click', () => {
+    soundOn = !soundOn;
+    try { localStorage.setItem(SOUND_KEY, soundOn ? 'on' : 'off'); } catch (e) {}
+    if (!soundOn) stopDrum(); else if (rolling) startDrum();
+    renderSoundBtn();
+  });
+  $('btn-hist').addEventListener('click', () => {
+    if (rolling) return;
+    renderHistory();
+    $('history').classList.add('open');
+  });
+  $('btn-close').addEventListener('click', () => $('history').classList.remove('open'));
+  $('btn-reset').addEventListener('click', () => {
+    if (rolling) return;
+    if (!drawn.length) return;
+    if (!confirm(`今のゲーム（${drawn.length}個出ています）を消して、新しいゲームを始めますか？`)) return;
+    if (!confirm('本当に消してよろしいですか？元には戻せません。')) return;
+    drawn = [];
+    save();
+    renderAll();
+    goBtn.textContent = 'スタート';
+  });
+
+  // ---------------- 起動 ----------------
+  load();
+  renderSoundBtn();
+  renderAll();
+  if (drawn.length) ball.className = '';   // 再開時はアニメなしで直前の番号を表示
+
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
+  // テスト用フック（画面には影響なし）
+  window.__bingo = { get drawn() { return drawn.slice(); }, startRoll, stopRoll, letterOf };
+})();
+</script>
+</body>
+</html>
